@@ -345,6 +345,22 @@
       word-break: break-word;
     }
 
+    .source-footer {
+      margin-top: 28px;
+      padding-top: 18px;
+      border-top: 2px solid var(--ink);
+      color: var(--muted);
+      font-family: "Courier New", "Microsoft YaHei", monospace;
+      font-size: 12px;
+      line-height: 1.7;
+    }
+
+    .source-footer a {
+      color: var(--ink);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
     @media (max-width: 900px) {
       .page {
         width: min(100% - 24px, 720px);
@@ -471,6 +487,12 @@
         </section>
       </div>
     </section>
+
+    <footer class="source-footer">
+      <div>docker 封装: <a href="https://github.com/Ericwyn/adetailer" target="_blank" rel="noopener noreferrer">https://github.com/Ericwyn/adetailer</a></div>
+      <div>模型数据: <a href="https://huggingface.co/Bingsu/adetailer" target="_blank" rel="noopener noreferrer">https://huggingface.co/Bingsu/adetailer</a></div>
+      <div>模型数据: <a href="https://github.com/switchablenorms/DeepFashion2/" target="_blank" rel="noopener noreferrer">https://github.com/switchablenorms/DeepFashion2/</a></div>
+    </footer>
   </main>
 
   <script>

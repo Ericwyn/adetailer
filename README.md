@@ -212,3 +212,14 @@ docker push registry.cn-hangzhou.aliyuncs.com/<namespace>/adetailer:latest
 | `hand_yolov8n.pt` | 手部 | 0.767 |
 | `person_yolov8n-seg.pt` | 人体分割 | 0.782 |
 | `deepfashion2_yolov8s-seg.pt` | 服装（13类） | 0.849 |
+
+---
+
+## 来源标记
+
+Docker 封装：<https://github.com/Ericwyn/adetailer>
+
+模型数据：
+
+- <https://huggingface.co/Bingsu/adetailer>
+- <https://github.com/switchablenorms/DeepFashion2/>
