@@ -21,9 +21,25 @@
 
 **请求体：**
 
+支持通过图片 URL 识别：
+
 ```json
 { "image_url": "https://example.com/image.jpg" }
 ```
+
+兼容旧字段名：
+
+```json
+{ "imageurl": "https://example.com/image.jpg" }
+```
+
+也支持 base64 图片，既可以传纯 base64，也可以传 Data URL：
+
+```json
+{ "image_base64": "data:image/png;base64,iVBORw0KGgo..." }
+```
+
+`image_url` / `imageurl` 与 `image_base64` 不能同时传入。
 
 **返回：**
 
@@ -40,7 +56,9 @@
 
 ### GET /
 
-可视化调试页面，输入图片 URL 后自动框选识别结果。
+可视化调试页面，支持输入图片 URL、拖入图片文件、粘贴剪贴板图片，并自动框选识别结果。
+
+![调试页面截图](screenshot/screenshot.png)
 
 ---
 
@@ -91,7 +109,7 @@ PORT=9100 MAX_IMAGE_SIZE_MB=5 python app.py
 
 **4. 访问调试页面**
 
-打开浏览器访问 `http://localhost:9000`，输入图片 URL 后点击 Detect，或按 `Ctrl+Enter` / `Cmd+Enter` 识别。
+打开浏览器访问 `http://localhost:9000`，输入图片 URL、拖入图片文件或直接粘贴图片后点击“开始识别”，也可以在 URL 输入框内按 `Ctrl+Enter` / `Cmd+Enter` 识别。
 
 **5. 测试接口**
 
@@ -99,6 +117,14 @@ PORT=9100 MAX_IMAGE_SIZE_MB=5 python app.py
 curl -X POST http://localhost:9000/regionPredict \
   -H "Content-Type: application/json" \
   -d '{"image_url": "https://example.com/fashion.jpg"}'
+```
+
+base64 图片示例：
+
+```bash
+curl -X POST http://localhost:9000/regionPredict \
+  -H "Content-Type: application/json" \
+  -d '{"image_base64": "data:image/png;base64,iVBORw0KGgo..."}'
 ```
 
 **切换模型（可选）**

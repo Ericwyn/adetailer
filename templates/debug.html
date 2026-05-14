@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ADetailer Region Predict</title>
+  <title>ADetailer 区域检测</title>
   <style>
     :root {
       color-scheme: light;
@@ -63,11 +63,12 @@
     }
 
     h1 {
-      max-width: 760px;
-      font-size: clamp(38px, 7vw, 92px);
+      max-width: none;
+      font-size: clamp(36px, 5vw, 68px);
       line-height: 0.92;
       font-weight: 700;
       letter-spacing: 0;
+      white-space: nowrap;
     }
 
     .meta {
@@ -150,6 +151,42 @@
     .url-input:focus {
       background: var(--paper);
       box-shadow: 0 0 0 3px var(--ink);
+    }
+
+    .drop-zone {
+      min-height: 132px;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      border: 1px dashed var(--ink);
+      border-radius: var(--radius);
+      background: var(--paper);
+      color: var(--muted);
+      font-family: "Courier New", "Microsoft YaHei", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      text-align: center;
+      text-transform: uppercase;
+      transition: background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .drop-zone.active {
+      background: var(--soft);
+      box-shadow: 0 0 0 3px var(--ink);
+      color: var(--ink);
+    }
+
+    .drop-zone.has-file {
+      border-style: solid;
+      color: var(--ink);
+      background: var(--soft);
+    }
+
+    .drop-title {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--ink);
+      font-weight: 700;
     }
 
     .actions {
@@ -343,7 +380,8 @@
       }
 
       h1 {
-        font-size: clamp(34px, 16vw, 58px);
+        font-size: clamp(30px, 9vw, 48px);
+        white-space: normal;
       }
 
       .meta {
@@ -377,50 +415,56 @@
   <main class="page">
     <header class="masthead">
       <div>
-        <div class="kicker">YOLOv8 / REGION PREDICT</div>
-        <h1>ADetailer Inspector</h1>
+        <div class="kicker">YOLOv8 / 区域检测</div>
+        <h1>ADetailer 区域检测</h1>
       </div>
       <div class="meta" aria-label="service metadata">
         <span>POST /regionPredict</span>
-        <span>Black / White</span>
+        <span>黑白调试台</span>
       </div>
     </header>
 
     <section class="workspace">
       <aside class="panel control-panel">
         <div class="panel-head">
-          <span>Input</span>
+          <span>输入</span>
           <span class="panel-index">01</span>
         </div>
         <div class="form-body">
-          <textarea class="url-input" id="url-input" spellcheck="false" placeholder="https://example.com/image.jpg"></textarea>
-          <div class="actions">
-            <button class="primary" id="btn" onclick="predict()">Detect</button>
-            <button class="clear" type="button" onclick="clearAll()" aria-label="Clear input and results">x</button>
+          <textarea class="url-input" id="url-input" spellcheck="false" placeholder="输入图片 URL，或拖入 / 粘贴图片"></textarea>
+          <div class="drop-zone" id="drop-zone">
+            <div>
+              <span class="drop-title" id="drop-title">拖入图片到这里</span>
+              <span id="drop-text">也可以直接粘贴剪贴板图片，或继续使用上方 URL。</span>
+            </div>
           </div>
-          <div id="status" class="status">Idle</div>
+          <div class="actions">
+            <button class="primary" id="btn" onclick="predict()">开始识别</button>
+            <button class="clear" type="button" onclick="clearAll()" aria-label="清空输入和结果">x</button>
+          </div>
+          <div id="status" class="status">待命</div>
         </div>
       </aside>
 
       <div class="result-stack">
         <section class="panel">
           <div class="panel-head">
-            <span>Preview</span>
+            <span>预览</span>
             <span class="panel-index">02</span>
           </div>
           <div class="stage">
-            <div class="empty-state" id="empty-state">Paste an image URL and run detection.</div>
+            <div class="empty-state" id="empty-state">输入图片 URL，或拖入 / 粘贴图片后开始识别。</div>
             <div class="canvas-wrap" id="canvas-wrap">
               <canvas id="canvas"></canvas>
             </div>
           </div>
         </section>
 
-        <section class="tags" id="tags" aria-label="detected regions"></section>
+        <section class="tags" id="tags" aria-label="检测区域"></section>
 
         <section class="panel json-wrap" id="json-wrap">
           <div class="panel-head">
-            <span>Raw Response</span>
+            <span>原始响应</span>
             <span class="panel-index">03</span>
           </div>
           <pre id="json-out"></pre>
@@ -430,35 +474,78 @@
   </main>
 
   <script>
+    let localImageBase64 = "";
+    let localPreviewSrc = "";
+    let localFileName = "";
+
     document.getElementById("url-input").addEventListener("keydown", event => {
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         predict();
       }
     });
 
+    document.getElementById("url-input").addEventListener("input", () => {
+      if (document.getElementById("url-input").value.trim()) {
+        clearLocalImage();
+      }
+    });
+
+    const dropZone = document.getElementById("drop-zone");
+    dropZone.addEventListener("dragover", event => {
+      event.preventDefault();
+      dropZone.classList.add("active");
+    });
+
+    dropZone.addEventListener("dragleave", () => {
+      dropZone.classList.remove("active");
+    });
+
+    dropZone.addEventListener("drop", event => {
+      event.preventDefault();
+      dropZone.classList.remove("active");
+      const file = [...event.dataTransfer.files].find(item => item.type.startsWith("image/"));
+      if (!file) {
+        setStatus("没有找到可用的图片文件。", true);
+        return;
+      }
+      loadLocalFile(file);
+    });
+
+    document.addEventListener("paste", event => {
+      const file = [...event.clipboardData.files].find(item => item.type.startsWith("image/"));
+      if (!file) return;
+      event.preventDefault();
+      loadLocalFile(file);
+    });
+
     async function predict() {
       const url = document.getElementById("url-input").value.trim();
-      if (!url) return;
+      if (!url && !localImageBase64) {
+        setStatus("请先输入图片 URL，或拖入 / 粘贴图片。", true);
+        return;
+      }
 
       const btn = document.getElementById("btn");
       const status = document.getElementById("status");
       btn.disabled = true;
-      btn.textContent = "Detecting";
+      btn.textContent = "识别中";
       status.className = "status";
-      status.textContent = "Requesting inference...";
+      status.textContent = "正在请求模型推理...";
       hideResults();
 
+      const payload = localImageBase64 ? { image_base64: localImageBase64 } : { image_url: url };
+      const previewSrc = localPreviewSrc || url;
       let data;
       try {
         const res = await fetch("/regionPredict", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ image_url: url }),
+          body: JSON.stringify(payload),
         });
         data = await res.json();
       } catch (error) {
         status.className = "status error";
-        status.textContent = "Request failed: " + error.message;
+        status.textContent = "请求失败：" + error.message;
         resetButton(btn);
         return;
       }
@@ -479,11 +566,11 @@
       };
       img.onerror = () => {
         status.className = "status error";
-        status.textContent = "Image preview failed. The API response is shown below.";
+        status.textContent = "图片预览失败，接口响应已显示在下方。";
         showJson(data);
         resetButton(btn);
       };
-      img.src = url;
+      img.src = previewSrc;
     }
 
     function drawResult(img, data) {
@@ -523,7 +610,7 @@
 
       const status = document.getElementById("status");
       status.className = "status ok";
-      status.textContent = `Done. ${regions.length} regions. ${data.image_size.width} x ${data.image_size.height}px.`;
+      status.textContent = `完成。识别到 ${regions.length} 个区域，图片尺寸 ${data.image_size.width} x ${data.image_size.height}px。`;
 
       renderTags(regions);
       showJson(data);
@@ -562,13 +649,51 @@
     function clearAll() {
       document.getElementById("url-input").value = "";
       document.getElementById("status").className = "status";
-      document.getElementById("status").textContent = "Idle";
+      document.getElementById("status").textContent = "待命";
+      clearLocalImage();
       hideResults();
     }
 
     function resetButton(btn) {
       btn.disabled = false;
-      btn.textContent = "Detect";
+      btn.textContent = "开始识别";
+    }
+
+    function loadLocalFile(file) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        localImageBase64 = reader.result;
+        localPreviewSrc = reader.result;
+        localFileName = file.name || "剪贴板图片";
+        document.getElementById("url-input").value = "";
+        updateDropZone();
+        setStatus(`已载入图片：${localFileName}。点击开始识别。`, false);
+      };
+      reader.onerror = () => {
+        setStatus("读取图片失败，请换一张图片重试。", true);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function clearLocalImage() {
+      localImageBase64 = "";
+      localPreviewSrc = "";
+      localFileName = "";
+      updateDropZone();
+    }
+
+    function updateDropZone() {
+      const title = document.getElementById("drop-title");
+      const text = document.getElementById("drop-text");
+      dropZone.classList.toggle("has-file", Boolean(localImageBase64));
+      title.textContent = localImageBase64 ? "已选择本地图片" : "拖入图片到这里";
+      text.textContent = localImageBase64 ? localFileName : "也可以直接粘贴剪贴板图片，或继续使用上方 URL。";
+    }
+
+    function setStatus(message, isError) {
+      const status = document.getElementById("status");
+      status.className = isError ? "status error" : "status ok";
+      status.textContent = message;
     }
   </script>
 </body>

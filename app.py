@@ -1,3 +1,5 @@
+import base64
+import binascii
 import io
 import os
 import requests
@@ -14,7 +16,8 @@ MODEL_PATH = os.environ.get(
 MAX_IMAGE_SIZE_MB = float(os.environ.get("MAX_IMAGE_SIZE_MB", "10"))
 MAX_IMAGE_SIZE_BYTES = int(MAX_IMAGE_SIZE_MB * 1024 * 1024)
 
-app.config["MAX_CONTENT_LENGTH"] = MAX_IMAGE_SIZE_BYTES
+# Base64 expands payloads by roughly 4/3; keep the decoded image limit unchanged.
+app.config["MAX_CONTENT_LENGTH"] = int(MAX_IMAGE_SIZE_BYTES * 4 / 3) + 4096
 
 print(f"Loading model from: {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
@@ -41,17 +44,42 @@ def fetch_image(image_url):
     return Image.open(io.BytesIO(b"".join(chunks))).convert("RGB")
 
 
+def decode_base64_image(image_base64):
+    if "," in image_base64 and image_base64.split(",", 1)[0].lower().endswith(";base64"):
+        image_base64 = image_base64.split(",", 1)[1]
+
+    try:
+        image_bytes = base64.b64decode(image_base64, validate=True)
+    except (binascii.Error, ValueError) as e:
+        raise ValueError("Invalid base64 image") from e
+
+    if len(image_bytes) > MAX_IMAGE_SIZE_BYTES:
+        raise ValueError(f"Image exceeds {MAX_IMAGE_SIZE_MB:g} MB limit")
+
+    return Image.open(io.BytesIO(image_bytes)).convert("RGB")
+
+
+def load_image_from_request(data):
+    image_url = data.get("image_url") or data.get("imageurl")
+    image_base64 = data.get("image_base64")
+
+    if image_url and image_base64:
+        raise ValueError("Use either image_url/imageurl or image_base64, not both")
+    if image_base64:
+        return decode_base64_image(image_base64)
+    if image_url:
+        return fetch_image(image_url)
+
+    raise ValueError("image_url, imageurl, or image_base64 is required")
+
+
 @app.route("/regionPredict", methods=["POST"])
 def region_predict():
     data = request.get_json(force=True, silent=True) or {}
-    image_url = data.get("image_url")
-    if not image_url:
-        return jsonify({"error": "image_url is required"}), 400
-
     try:
-        img = fetch_image(image_url)
+        img = load_image_from_request(data)
     except Exception as e:
-        return jsonify({"error": f"Failed to fetch image: {str(e)}"}), 400
+        return jsonify({"error": f"Failed to load image: {str(e)}"}), 400
 
     results = model(img)
     regions = []
