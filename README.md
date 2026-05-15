@@ -98,13 +98,15 @@ Model loaded.
 | 变量名 | 默认值 | 说明 |
 |--------|--------|------|
 | `PORT` | `9000` | 服务监听端口 |
-| `MODEL_PATH` | `adetailer/deepfashion2_yolov8s-seg.pt` | YOLO 模型文件路径 |
+| `MODEL_PATH` | `adetailer/deepfashion2_yolov8s-seg.pt` | YOLO 模型文件路径（支持 `.pt` 和 `.onnx`，同名 `.onnx` 存在时自动优先加载） |
+| `INFER_IMGSZ` | `416` | 推理时的图片缩放尺寸（像素）。越小越快，越大越准。可选值：`320`（最快）、`416`（均衡）、`640`（最准） |
 | `MAX_IMAGE_SIZE_MB` | `10` | 远程图片最大下载大小，单位 MB |
+| `CPU_CORES` | `2` | 分配给推理的 CPU 核心数，同步设置 PyTorch / OpenMP / OpenBLAS 线程数，建议与容器实际核心数保持一致 |
 
 示例：
 
 ```bash
-PORT=9100 MAX_IMAGE_SIZE_MB=5 python app.py
+PORT=9100 MAX_IMAGE_SIZE_MB=5 INFER_IMGSZ=320 CPU_CORES=2 python app.py
 ```
 
 **4. 访问调试页面**
