@@ -2,7 +2,10 @@ import base64
 import binascii
 import io
 import os
+import time
+import numpy as np
 import requests
+import torch
 from flask import Flask, request, jsonify, render_template
 from PIL import Image
 from ultralytics import YOLO
@@ -15,13 +18,36 @@ MODEL_PATH = os.environ.get(
 )
 MAX_IMAGE_SIZE_MB = float(os.environ.get("MAX_IMAGE_SIZE_MB", "10"))
 MAX_IMAGE_SIZE_BYTES = int(MAX_IMAGE_SIZE_MB * 1024 * 1024)
+CONF_THRESHOLD = float(os.environ.get("CONF_THRESHOLD", "0.25"))
+IMGSZ = int(os.environ.get("IMGSZ", "640"))
+NUM_THREADS = int(os.environ.get("NUM_THREADS", "1"))
+MAX_DET = int(os.environ.get("MAX_DET", "50"))
 
 # Base64 expands payloads by roughly 4/3; keep the decoded image limit unchanged.
 app.config["MAX_CONTENT_LENGTH"] = int(MAX_IMAGE_SIZE_BYTES * 4 / 3) + 4096
 
+torch.set_num_threads(NUM_THREADS)
+torch.set_num_interop_threads(NUM_THREADS)
+
 print(f"Loading model from: {MODEL_PATH}")
 model = YOLO(MODEL_PATH)
 print("Model loaded.")
+
+_warmup_img = Image.fromarray(np.zeros((64, 64, 3), dtype=np.uint8))
+with torch.inference_mode():
+    model(_warmup_img, imgsz=IMGSZ, conf=CONF_THRESHOLD, max_det=MAX_DET, retina_masks=False, verbose=False)
+del _warmup_img
+print("Model warmed up.")
+
+
+def _prescale_image(img: Image.Image) -> tuple:
+    """Downscale to at most IMGSZ on the longest side before passing to YOLO.
+    Avoids allocating a large tensor when the source image far exceeds inference size."""
+    w, h = img.size
+    scale = min(IMGSZ / w, IMGSZ / h)
+    if scale >= 1.0:
+        return img, 1.0
+    return img.resize((int(w * scale), int(h * scale)), Image.Resampling.BILINEAR), scale
 
 
 def fetch_image(image_url):
@@ -75,32 +101,55 @@ def load_image_from_request(data):
 
 @app.route("/regionPredict", methods=["POST"])
 def region_predict():
+    t_start = time.monotonic()
     data = request.get_json(force=True, silent=True) or {}
     try:
         img = load_image_from_request(data)
     except Exception as e:
         return jsonify({"error": f"Failed to load image: {str(e)}"}), 400
+    t_load = time.monotonic()
 
-    results = model(img)
+    orig_w, orig_h = img.size
+    scaled_img, scale = _prescale_image(img)
+
+    with torch.inference_mode():
+        results = model(scaled_img, imgsz=IMGSZ, conf=CONF_THRESHOLD, max_det=MAX_DET, retina_masks=False, verbose=False)
+    t_infer = time.monotonic()
+
     regions = []
     for result in results:
         if result.boxes is None:
             continue
         for box in result.boxes:
-            x1, y1, x2, y2 = [int(v) for v in box.xyxy[0].tolist()]
+            x1, y1, x2, y2 = box.xyxy[0].tolist()
             conf = round(float(box.conf[0]), 3)
             cls = int(box.cls[0])
             label = model.names[cls]
             regions.append({
-                "bbox": [x1, y1, x2, y2],
+                "bbox": [
+                    int(x1 / scale), int(y1 / scale),
+                    int(x2 / scale), int(y2 / scale),
+                ],
                 "label": label,
                 "confidence": conf,
             })
 
+    t_end = time.monotonic()
+    print(
+        f"regionPredict | image={orig_w}x{orig_h} scale={scale:.2f} regions={len(regions)} | "
+        f"load={1000*(t_load-t_start):.1f}ms infer={1000*(t_infer-t_load):.1f}ms "
+        f"post={1000*(t_end-t_infer):.1f}ms total={1000*(t_end-t_start):.1f}ms"
+    )
+
     return jsonify({
         "regions": regions,
-        "image_size": {"width": img.width, "height": img.height},
+        "image_size": {"width": orig_w, "height": orig_h},
     })
+
+
+@app.route("/health")
+def health():
+    return jsonify({"status": "ok"}), 200
 
 
 @app.route("/")

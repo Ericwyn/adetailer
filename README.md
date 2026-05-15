@@ -54,6 +54,10 @@
 
 `bbox` 中 `(x1, y1)` 为左上角坐标，`(x2, y2)` 为右下角坐标。
 
+### GET /health
+
+健康检查接口，返回 `{"status": "ok"}`，HTTP 200。FC 健康检查路径配置为此接口。
+
 ### GET /
 
 可视化调试页面，支持输入图片 URL、拖入图片文件、粘贴剪贴板图片，并自动框选识别结果。
@@ -91,6 +95,8 @@ python app.py
 ```
 Loading model from: adetailer/deepfashion2_yolov8s-seg.pt
 Model loaded.
+Model warmed up.
+ * Running on http://0.0.0.0:9000
 ```
 
 **3. 环境变量配置**
@@ -100,6 +106,10 @@ Model loaded.
 | `PORT` | `9000` | 服务监听端口 |
 | `MODEL_PATH` | `adetailer/deepfashion2_yolov8s-seg.pt` | YOLO 模型文件路径 |
 | `MAX_IMAGE_SIZE_MB` | `10` | 远程图片最大下载大小，单位 MB |
+| `CONF_THRESHOLD` | `0.25` | 置信度过滤阈值，低于此值的检测结果会被丢弃 |
+| `IMGSZ` | `640` | 推理分辨率，降低可提升速度（如 `320`），精度会有所下降 |
+| `MAX_DET` | `50` | 单张图片最大检测数量 |
+| `NUM_THREADS` | `1` | PyTorch CPU 线程数，FC 单核实例建议保持 `1` |
 
 示例：
 
@@ -193,11 +203,21 @@ docker push registry.cn-hangzhou.aliyuncs.com/<namespace>/adetailer:latest
 |--------|--------|
 | 运行时 | 自定义容器 |
 | 监听端口 | 9000 |
-| 内存 | 1024 MB 以上 |
-| 超时时间 | 60s |
+| 健康检查路径 | `/health` |
+| 内存 | 2048 MB |
+| 超时时间 | 120s |
+| 单实例并发 | 2 |
 | 触发器 | HTTP 触发器 |
 
-> 建议开启**预留实例**，避免冷启动时重复加载模型（首次加载约 3~5 秒）。
+推荐配置的环境变量：
+
+| 变量名 | 推荐值 | 说明 |
+|--------|--------|------|
+| `IMGSZ` | `320` 或 `640` | 推理分辨率，`320` 速度约快 3 倍，精度略降 |
+| `CONF_THRESHOLD` | `0.3` | 适当提高可减少误检，加快后处理 |
+| `MAX_DET` | `20` | 服装场景单图一般不超过 20 个目标 |
+
+> 建议开启**预留实例**，避免冷启动时重复加载模型（首次加载约 5~10 秒）。ACR 控制台开启**镜像按需加载**可将冷启动时间从 30s+ 压到 5s 以内。
 
 ---
 

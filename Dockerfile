@@ -9,7 +9,9 @@ ENV HTTP_PROXY="" \
     http_proxy="" \
     https_proxy="" \
     NO_PROXY="" \
-    no_proxy=""
+    no_proxy="" \
+    OMP_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1
 
 # torch + ultralytics already included in base image, only install app deps
 COPY requirements.txt .
@@ -18,4 +20,4 @@ RUN pip install --no-cache-dir -r requirements.txt -i https://mirrors.aliyun.com
 COPY . .
 
 EXPOSE 9000
-CMD ["python", "app.py"]
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT:-9000} --workers 1 --threads 2 --timeout 120 app:app"]
