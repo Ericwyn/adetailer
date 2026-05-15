@@ -1,9 +1,8 @@
 name: Build and Push Docker Image
 
 on:
-  push:
-    branches:
-      - main
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -30,4 +29,5 @@ jobs:
         with:
           context: .
           push: true
-          tags: ghcr.io/ericwyn/adetailer:latest
+          tags: |
+            ghcr.io/ericwyn/adetailer:${{ github.ref_name }}
