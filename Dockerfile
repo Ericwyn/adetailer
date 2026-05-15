@@ -1,4 +1,4 @@
-FROM ultralytics/ultralytics:8.3.96-cpu
+FROM swr.cn-north-4.myhuaweicloud.com/ddn-k8s/docker.io/ultralytics/ultralytics:8.3.96-cpu
 
 WORKDIR /app
 
